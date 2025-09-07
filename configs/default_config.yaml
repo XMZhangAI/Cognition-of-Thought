@@ -1,0 +1,36 @@
+# COOT Default Configuration
+# This file contains the default parameters for the COOT decoder
+
+# Model Configuration
+model_name: "microsoft/DialoGPT-small"  # HuggingFace model name
+device: "auto"  # Device to use: "auto", "cpu", "cuda", or specific device
+
+# Attention Analysis Parameters
+attention_alpha: 0.5  # Balance between max-norm (0.0) and entropy (1.0) in sharpness score
+attention_top_layers: null  # List of layer indices to use, null for automatic selection
+
+# Intervention Parameters
+rollback_threshold: 0.7  # Minimum sharpness score for rollback points (0.0-1.0)
+rollback_window: 10  # Number of steps to search for rollback points
+max_intervention_tokens: 20  # Maximum tokens to regenerate per intervention
+escalation_threshold: 2  # Number of failed interventions before escalation
+
+# Guidance Parameters
+lambda_positive: 2.0  # Strength of positive concept bias
+lambda_negative: -3.0  # Strength of negative concept suppression
+
+# Generation Parameters
+temperature: 1.0  # Sampling temperature
+top_k: null  # Top-k sampling (null to disable)
+top_p: 0.9  # Top-p/nucleus sampling (null to disable)
+repetition_penalty: 1.0  # Repetition penalty factor
+max_length: 200  # Maximum generation length
+
+# Prompts (null for defaults)
+perceiver_prompt: null  # Custom perceiver prompt
+generator_prompt: null  # Custom generator prompt
+
+# Logging and Debugging
+verbose: false  # Print detailed generation progress
+return_traces: true  # Return intervention traces with results
+log_interventions: true  # Log intervention details
