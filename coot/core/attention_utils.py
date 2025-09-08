@@ -46,9 +46,23 @@ class AttentionAnalyzer:
         Returns:
             AttentionSnapshot with aggregated attention information
         """
+        # Handle empty or None attention maps
+        if not attention_maps:
+            print("No attention maps found")
+            # Fallback: uniform attention
+            mean_attention = torch.ones(max(1, step)) / max(1, step)
+            return AttentionSnapshot(
+                step=step,
+                attention_weights=mean_attention.unsqueeze(0),
+                mean_attention=mean_attention,
+                sharpness_score=0.0,
+                max_weight=1.0 / max(1, step),
+                entropy=np.log(max(1, step))
+            )
+        
         if self.top_layers is None:
             # Use top 4 layers by default
-            layer_indices = sorted(attention_maps.keys())[-4:]
+            layer_indices = sorted(attention_maps.keys())[-4:] if attention_maps else []
         else:
             layer_indices = self.top_layers
             
@@ -56,13 +70,17 @@ class AttentionAnalyzer:
         all_attentions = []
         
         for layer_idx in layer_indices:
-            if layer_idx in attention_maps:
-                # Get attention from all heads at current position (step-1 in 0-indexed)
-                layer_attention = attention_maps[layer_idx]  # [num_heads, seq_len, seq_len]
-                if step > 0 and step <= layer_attention.size(-1):
-                    # Attention from current position to all previous positions
-                    current_attention = layer_attention[:, step-1, :step]  # [num_heads, step]
-                    all_attentions.append(current_attention)
+            if layer_idx in attention_maps and attention_maps[layer_idx] is not None:
+                try:
+                    # Get attention from all heads at current position (step-1 in 0-indexed)
+                    layer_attention = attention_maps[layer_idx]  # [num_heads, seq_len, seq_len]
+                    if step > 0 and step <= layer_attention.size(-1):
+                        # Attention from current position to all previous positions
+                        current_attention = layer_attention[:, step-1, :step]  # [num_heads, step]
+                        all_attentions.append(current_attention)
+                except Exception as e:
+                    # Skip this layer if there's an error
+                    continue
         
         if not all_attentions:
             # Fallback: uniform attention

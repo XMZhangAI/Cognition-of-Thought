@@ -141,8 +141,12 @@ Current context to analyze:"""
         
         # Forward pass through model
         with torch.no_grad():
+            # Create attention mask to avoid warnings
+            attention_mask = torch.ones_like(full_input, dtype=torch.long)
+            
             outputs = self.model(
                 input_ids=full_input,
+                attention_mask=attention_mask,
                 use_cache=False,
                 output_hidden_states=True
             )
@@ -179,9 +183,13 @@ Current context to analyze:"""
         full_input = torch.cat([input_ids, rationale_ids], dim=-1)
         
         with torch.no_grad():
+            # Create attention mask for generation
+            attention_mask = torch.ones_like(full_input, dtype=torch.long)
+            
             # Generate rationale (short controlled decode)
             rationale_output = self.model.generate(
                 full_input,
+                attention_mask=attention_mask,
                 max_new_tokens=50,
                 do_sample=True,
                 temperature=0.7,
@@ -229,8 +237,12 @@ Current context to analyze:"""
         
         # Forward pass
         with torch.no_grad():
+            # Create attention mask for batch
+            attention_mask = torch.ones_like(full_batch, dtype=torch.long)
+            
             outputs = self.model(
                 input_ids=full_batch,
+                attention_mask=attention_mask,
                 use_cache=False,
                 output_hidden_states=True
             )
@@ -281,8 +293,12 @@ Current context to analyze:"""
                 batch_contexts = self._prepare_batch_contexts(contexts)
                 
                 with torch.no_grad():
+                    # Create attention mask for training batch
+                    attention_mask = torch.ones_like(batch_contexts, dtype=torch.long)
+                    
                     outputs = self.model(
                         input_ids=batch_contexts,
+                        attention_mask=attention_mask,
                         use_cache=False,
                         output_hidden_states=True
                     )

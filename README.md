@@ -1,1 +1,1 @@
-# Cognition-of-Thought
+## COOT: Cognition-of-Thought

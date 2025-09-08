@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from .state_system import AsimovStateSystem, CognitiveState, StateValue
 from .perceiver import Perceiver
+from .simple_perceiver import RobustPerceiver
 from .generator import Generator
 from .attention_utils import AttentionAnalyzer
 from .guidance import GuidanceGenerator
@@ -42,8 +43,15 @@ class COOTDecoder:
                  lambda_negative: float = -3.0,
                  # Robust gating parameters
                  min_context_tokens: int = 8,
-                 violation_patience: int = 2,
-                 regen_violation_tolerance: int = 2):
+                 violation_patience: int = 3,  # 增加违规容忍度
+                 regen_violation_tolerance: int = 5,  # 增加再生成违规容忍度
+                 strict_intervention: bool = False,  # 是否使用严格干预模式
+                 # Residual injection parameters
+                 residual_injection_level: str = "representation",
+                 injection_beta: float = 0.1,
+                 inject_layers: Optional[List[int]] = None,
+                 # Perceiver options
+                 use_simple_perceiver: bool = True):
         """
         Args:
             model: Base language model (shared between generator and perceiver)
@@ -72,18 +80,31 @@ class COOTDecoder:
         )
         self.guidance_generator = GuidanceGenerator(tokenizer)
         
-        self.perceiver = Perceiver(
-            model=model,
-            tokenizer=tokenizer,
-            state_system=self.state_system,
-            perceiver_prompt=perceiver_prompt,
-            device=self.device
-        )
+        # Choose perceiver type
+        if use_simple_perceiver:
+            self.perceiver = RobustPerceiver(
+                model=model,
+                tokenizer=tokenizer,
+                state_system=self.state_system,
+                perceiver_prompt=perceiver_prompt,
+                device=self.device
+            )
+        else:
+            self.perceiver = Perceiver(
+                model=model,
+                tokenizer=tokenizer,
+                state_system=self.state_system,
+                perceiver_prompt=perceiver_prompt,
+                device=self.device
+            )
         
         self.generator = Generator(
             model=model,
             tokenizer=tokenizer,
-            device=self.device
+            device=self.device,
+            residual_injection_level=residual_injection_level,
+            injection_beta=injection_beta,
+            inject_layers=inject_layers
         )
         
         self.intervention_mechanism = InterventionMechanism(
@@ -100,14 +121,15 @@ class COOTDecoder:
         self.lambda_negative = lambda_negative
         self.generator_prompt = generator_prompt
         
-        # State tracking
-        self.generation_active = False
-        self.intervention_traces: List[InterventionTrace] = []
-        
-        # Robust gating config
+        # Robust gating parameters
         self.min_context_tokens = max(0, min_context_tokens)
         self.violation_patience = max(1, violation_patience)
         self.regen_violation_tolerance = max(0, regen_violation_tolerance)
+        self.strict_intervention = strict_intervention
+        
+        # State tracking
+        self.generation_active = False
+        self.intervention_traces: List[InterventionTrace] = []
     
     def generate(self,
                 input_text: str,
@@ -117,7 +139,7 @@ class COOTDecoder:
                 top_p: Optional[float] = None,
                 repetition_penalty: float = 1.0,
                 return_traces: bool = True,
-                verbose: bool = False) -> Union[str, Tuple[str, Dict]]:
+                verbose: bool = True) -> Union[str, Tuple[str, Dict]]:
         """
         Generate text using COOT dual-path decoding
         
@@ -196,7 +218,7 @@ class COOTDecoder:
                 # Update state system (record state) and apply robust gating before intervention
                 _ = self.state_system.update_state(cognitive_state)
                 context_len = int(self.generator.current_sequence.size(-1))
-                if cognitive_state.requires_intervention() and context_len >= self.min_context_tokens:
+                if cognitive_state.requires_intervention(self.strict_intervention) and context_len >= self.min_context_tokens:
                     consecutive_violations += 1
                 else:
                     consecutive_violations = 0
@@ -261,9 +283,15 @@ class COOTDecoder:
     def _extract_attention_maps(self, attention_weights: Tuple) -> Dict[int, torch.Tensor]:
         """Extract attention maps from model outputs"""
         attention_maps = {}
+        
+        if attention_weights is None:
+            # Fallback: return empty dict if no attention weights
+            return attention_maps
+            
         for layer_idx, layer_attention in enumerate(attention_weights):
-            # layer_attention shape: [batch_size, num_heads, seq_len, seq_len]
-            attention_maps[layer_idx] = layer_attention[0]  # Remove batch dimension
+            if layer_attention is not None:
+                # layer_attention shape: [batch_size, num_heads, seq_len, seq_len]
+                attention_maps[layer_idx] = layer_attention[0]  # Remove batch dimension
         return attention_maps
     
     def _handle_intervention(self,
@@ -335,7 +363,7 @@ class COOTDecoder:
                 new_context = self.generator.current_sequence[0]
                 new_state, _ = self.perceiver.perceive(new_context, return_rationale=False)
                 
-                if new_state.requires_intervention():
+                if new_state.requires_intervention(self.strict_intervention):
                     remaining_tolerance -= 1
                     if verbose:
                         print(f"   ⚠️  Violation detected during regeneration (tolerance left: {max(0, remaining_tolerance)})")

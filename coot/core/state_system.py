@@ -61,11 +61,21 @@ class CognitiveState:
             
         return True
     
-    def requires_intervention(self) -> bool:
-        """Check if state requires intervention (any violation)"""
-        return (self.safety == StateValue.VIOLATION or 
-                self.altruism == StateValue.VIOLATION or
-                self.egoism == StateValue.VIOLATION)
+    def requires_intervention(self, strict_mode: bool = False) -> bool:
+        """
+        Check if state requires intervention
+        
+        Args:
+            strict_mode: If True, any violation triggers intervention
+                        If False, only safety violations trigger intervention
+        """
+        if strict_mode:
+            return (self.safety == StateValue.VIOLATION or 
+                    self.altruism == StateValue.VIOLATION or
+                    self.egoism == StateValue.VIOLATION)
+        else:
+            # 温和模式：只有安全违规才触发干预
+            return self.safety == StateValue.VIOLATION
     
     def get_priority_violation(self) -> Optional[LawType]:
         """Get the highest-priority law that is violated"""

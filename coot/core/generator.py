@@ -1,5 +1,5 @@
 """
-Generator module for COOT - handles text generation with logit bias
+Generator module for COOT - handles text generation with multi-level residual injection
 """
 
 import torch
@@ -8,6 +8,7 @@ from typing import Optional, Dict, List, Tuple, Any
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from .guidance import GuidanceConcepts
+from .residual_injection import MultiLevelResidualInjector, create_residual_injector, InjectionLevel
 
 
 class Generator:
@@ -18,12 +19,18 @@ class Generator:
     def __init__(self,
                  model: PreTrainedModel,
                  tokenizer: PreTrainedTokenizer,
-                 device: Optional[torch.device] = None):
+                 device: Optional[torch.device] = None,
+                 residual_injection_level: str = "representation",
+                 injection_beta: float = 0.1,
+                 inject_layers: Optional[List[int]] = None):
         """
         Args:
             model: Base language model for generation
             tokenizer: Tokenizer for the model
             device: Device to run on
+            residual_injection_level: Level of residual injection ("representation", "attention", "trajectory")
+            injection_beta: Strength of residual injection
+            inject_layers: Which layers to inject into
         """
         self.model = model
         self.tokenizer = tokenizer
@@ -34,9 +41,117 @@ class Generator:
         self.current_sequence = None
         self.generation_step = 0
         
-        # Bias tracking
+        # Legacy bias tracking (for backward compatibility)
         self.current_bias = None
         self.bias_remaining_steps = 0
+        
+        # Multi-level residual injection
+        self.residual_injector = create_residual_injector(
+            model=model,
+            tokenizer=tokenizer,
+            injection_level=residual_injection_level,
+            inject_layers=inject_layers,
+            beta_strength=injection_beta,
+            device=self.device
+        )
+        
+        # Register forward hooks for residual injection
+        self._register_injection_hooks()
+        
+    def _register_injection_hooks(self):
+        """Register forward hooks for multi-level residual injection"""
+        self.injection_hooks = []
+        
+        # Get injection level
+        injection_level = self.residual_injector.config.injection_level
+        inject_layers = self.residual_injector.config.inject_layers
+        
+        if injection_level == InjectionLevel.REPRESENTATION:
+            # Hook hidden states in transformer layers
+            for layer_idx in inject_layers:
+                layer = None
+                
+                # Try different model architectures
+                if hasattr(self.model, 'transformer') and hasattr(self.model.transformer, 'h'):
+                    # GPT-style models (DialoGPT, GPT-2, etc.)
+                    if layer_idx < len(self.model.transformer.h):
+                        layer = self.model.transformer.h[layer_idx]
+                        
+                elif hasattr(self.model, 'model') and hasattr(self.model.model, 'layers'):
+                    # LLaMA-style models
+                    if layer_idx < len(self.model.model.layers):
+                        layer = self.model.model.layers[layer_idx]
+                        
+                elif hasattr(self.model, 'transformer') and hasattr(self.model.transformer, 'layers'):
+                    # Qwen-style models
+                    if layer_idx < len(self.model.transformer.layers):
+                        layer = self.model.transformer.layers[layer_idx]
+                        
+                elif hasattr(self.model, 'layers'):
+                    # Direct layers attribute
+                    if layer_idx < len(self.model.layers):
+                        layer = self.model.layers[layer_idx]
+                
+                if layer is not None:
+                    hook = layer.register_forward_hook(self._representation_injection_hook(layer_idx))
+                    self.injection_hooks.append(hook)
+        
+        elif injection_level == InjectionLevel.ATTENTION:
+            # Hook attention modules
+            for layer_idx in inject_layers:
+                attn_module = None
+                
+                # Try different model architectures for attention modules
+                if hasattr(self.model, 'transformer') and hasattr(self.model.transformer, 'h'):
+                    # GPT-style models
+                    if (layer_idx < len(self.model.transformer.h) and 
+                        hasattr(self.model.transformer.h[layer_idx], 'attn')):
+                        attn_module = self.model.transformer.h[layer_idx].attn
+                        
+                elif hasattr(self.model, 'model') and hasattr(self.model.model, 'layers'):
+                    # LLaMA-style models
+                    if (layer_idx < len(self.model.model.layers) and 
+                        hasattr(self.model.model.layers[layer_idx], 'self_attn')):
+                        attn_module = self.model.model.layers[layer_idx].self_attn
+                        
+                elif hasattr(self.model, 'transformer') and hasattr(self.model.transformer, 'layers'):
+                    # Qwen-style models
+                    if (layer_idx < len(self.model.transformer.layers) and 
+                        hasattr(self.model.transformer.layers[layer_idx], 'attn')):
+                        attn_module = self.model.transformer.layers[layer_idx].attn
+                
+                if attn_module is not None:
+                    hook = attn_module.register_forward_hook(self._attention_injection_hook(layer_idx))
+                    self.injection_hooks.append(hook)
+    
+    def _representation_injection_hook(self, layer_idx: int):
+        """Create a forward hook for representation-level injection"""
+        def hook_fn(module, input, output):
+            if self.residual_injector.is_active():
+                if isinstance(output, tuple):
+                    # Handle tuple outputs (hidden_states, ...)
+                    hidden_states = output[0]
+                    modified_hidden = self.residual_injector.inject_representation_residual(
+                        hidden_states, layer_idx
+                    )
+                    return (modified_hidden,) + output[1:]
+                else:
+                    # Handle direct tensor output
+                    return self.residual_injector.inject_representation_residual(
+                        output, layer_idx
+                    )
+            return output
+        return hook_fn
+    
+    def _attention_injection_hook(self, layer_idx: int):
+        """Create a forward hook for attention-level injection"""
+        def hook_fn(module, input, output):
+            if self.residual_injector.is_active():
+                # This is more complex and model-specific
+                # For now, we'll implement a simplified version
+                return output
+            return output
+        return hook_fn
         
     def initialize_generation(self, 
                             input_ids: torch.Tensor,
@@ -95,18 +210,39 @@ class Generator:
         
         # Forward pass through model
         with torch.no_grad():
-            outputs = self.model(
-                input_ids=self.current_sequence,
-                past_key_values=self.kv_cache,
-                use_cache=True,
-                output_attentions=True,
-                output_hidden_states=False
-            )
+            # Create attention mask to avoid warnings
+            attention_mask = torch.ones_like(self.current_sequence, dtype=torch.long)
             
-            # Extract logits and attention
-            logits = outputs.logits[0, -1, :]  # Last token logits [vocab_size]
-            attention_weights = outputs.attentions  # Attention from all layers
-            self.kv_cache = outputs.past_key_values
+            try:
+                outputs = self.model(
+                    input_ids=self.current_sequence,
+                    attention_mask=attention_mask,
+                    past_key_values=self.kv_cache,
+                    use_cache=True,
+                    output_attentions=True,
+                    output_hidden_states=False
+                )
+                
+                # Extract logits and attention
+                logits = outputs.logits[0, -1, :]  # Last token logits [vocab_size]
+                attention_weights = outputs.attentions  # Attention from all layers
+                self.kv_cache = outputs.past_key_values
+                
+            except Exception as e:
+                # Fallback: try without attention output if it fails
+                print(f"Warning: Failed to get attention weights: {str(e)}")
+                outputs = self.model(
+                    input_ids=self.current_sequence,
+                    attention_mask=attention_mask,
+                    past_key_values=self.kv_cache,
+                    use_cache=True,
+                    output_attentions=False,
+                    output_hidden_states=False
+                )
+                
+                logits = outputs.logits[0, -1, :]
+                attention_weights = None  # No attention weights available
+                self.kv_cache = outputs.past_key_values
         
         # Apply repetition penalty
         if repetition_penalty != 1.0:
@@ -116,10 +252,13 @@ class Generator:
         if logit_bias is not None:
             logits = logits + logit_bias.to(logits.device)
         
-        # Apply current bias if active
+        # Apply current bias if active (legacy logit bias)
         if self.current_bias is not None and self.bias_remaining_steps > 0:
             logits = logits + self.current_bias.to(logits.device)
             self.bias_remaining_steps -= 1
+        
+        # Step residual injection counter
+        self.residual_injector.step_injection()
         
         # Sample next token
         next_token_id = self._sample_token(logits, temperature, top_k, top_p)
@@ -206,15 +345,18 @@ class Generator:
                           lambda_positive: float = 2.0,
                           lambda_negative: float = -3.0):
         """
-        Apply guidance as logit bias for specified number of steps
+        Apply guidance using multi-level residual injection
         
         Args:
             guidance: Guidance concepts to apply
             num_steps: Number of generation steps to apply bias
-            lambda_positive: Positive bias strength
-            lambda_negative: Negative bias strength
+            lambda_positive: Positive bias strength (legacy, for logit bias)
+            lambda_negative: Negative bias strength (legacy, for logit bias)
         """
-        # Create bias tensor
+        # Activate multi-level residual injection
+        self.residual_injector.activate_injection(guidance, num_steps)
+        
+        # Also maintain legacy logit bias for backward compatibility
         vocab_size = self.model.config.vocab_size
         bias = torch.zeros(vocab_size, device=self.device)
         
@@ -343,13 +485,34 @@ class Generator:
         self.generation_step = 0
         self.current_bias = None
         self.bias_remaining_steps = 0
+        
+        # Reset residual injection
+        self.residual_injector.reset()
+    
+    def cleanup_hooks(self):
+        """Remove all registered hooks"""
+        if hasattr(self, 'injection_hooks'):
+            for hook in self.injection_hooks:
+                hook.remove()
+            self.injection_hooks.clear()
+    
+    def __del__(self):
+        """Cleanup hooks on deletion"""
+        self.cleanup_hooks()
     
     def get_statistics(self) -> Dict:
         """Get generation statistics"""
-        return {
+        stats = {
             'current_step': self.generation_step,
             'sequence_length': self.current_sequence.size(-1) if self.current_sequence is not None else 0,
             'bias_active': self.current_bias is not None and self.bias_remaining_steps > 0,
             'bias_remaining_steps': self.bias_remaining_steps,
             'cache_initialized': self.kv_cache is not None
         }
+        
+        # Add residual injection statistics
+        stats.update({
+            'residual_injection': self.residual_injector.get_injection_info()
+        })
+        
+        return stats

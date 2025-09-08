@@ -1,0 +1,9 @@
+models/
+*.pyc
+*/pycache/
+__pycache__/
+*/__pycache__/
+*/.pytest_cache/
+*/.vscode/
+*/.idea/
+*/.DS_Store
