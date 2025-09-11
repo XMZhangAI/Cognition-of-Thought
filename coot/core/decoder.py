@@ -364,6 +364,11 @@ class COOTDecoder:
                 new_state, _ = self.perceiver.perceive(new_context, return_rationale=False)
                 
                 if new_state.requires_intervention(self.strict_intervention):
+                    # Increase residual injection beta when violations persist at the same regeneration position
+                    try:
+                        self.generator.residual_injector.increase_beta_on_violation(1)
+                    except Exception:
+                        pass
                     remaining_tolerance -= 1
                     if verbose:
                         print(f"   ⚠️  Violation detected during regeneration (tolerance left: {max(0, remaining_tolerance)})")
@@ -372,6 +377,12 @@ class COOTDecoder:
                             print(f"   ❌ Re-intervention needed at regeneration step {tokens_generated}")
                         intervention_successful = False
                         break
+                else:
+                    # Slightly decay beta on safe steps
+                    try:
+                        self.generator.residual_injector.decay_beta()
+                    except Exception:
+                        pass
                 
                 if verbose and tokens_generated <= 3:  # Show first few regenerated tokens
                     print(f"   🔄 Regenerated: '{gen_info['token_text']}'")
@@ -386,6 +397,13 @@ class COOTDecoder:
                     print(f"   ✅ Intervention successful ({tokens_generated} tokens regenerated)")
                 else:
                     print(f"   ❌ Intervention failed after {tokens_generated} tokens")
+            
+            # Reset beta after a successful intervention to avoid over-strength in later steps
+            try:
+                if intervention_successful:
+                    self.generator.residual_injector.reset_beta()
+            except Exception:
+                pass
             
             return intervention_successful
             

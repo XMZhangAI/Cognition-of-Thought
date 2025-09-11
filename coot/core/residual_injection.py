@@ -160,6 +160,14 @@ class MultiLevelResidualInjector:
         self.active_residual = None
         self.injection_steps_remaining = 0
         self.trajectory_buffer = []  # For trajectory-level injection
+
+        # Adaptive beta control
+        # Keep a baseline (initial) beta to allow decay/reset strategies
+        self.baseline_beta_strength = float(config.beta_strength)
+        # Reasonable defaults for scaling and bounds
+        self.max_beta_strength = float(max(self.baseline_beta_strength * 5.0, self.baseline_beta_strength))
+        self.beta_scale_factor = 1.5
+        self.beta_decay_factor = 0.9
         
     def activate_injection(self, 
                           guidance: GuidanceConcepts,
@@ -302,6 +310,9 @@ class MultiLevelResidualInjector:
         self.active_residual = None
         self.injection_steps_remaining = 0
         self.trajectory_buffer.clear()
+
+        # Also reset beta to baseline when fully resetting injector
+        self.config.beta_strength = self.baseline_beta_strength
     
     def get_injection_info(self) -> Dict[str, Any]:
         """Get current injection status information"""
@@ -312,6 +323,34 @@ class MultiLevelResidualInjector:
             'inject_layers': self.config.inject_layers,
             'beta_strength': self.config.beta_strength
         }
+
+    # -------------------------
+    # Adaptive beta API
+    # -------------------------
+    def set_beta_strength(self, new_beta: float) -> float:
+        """Set beta strength within [baseline, max] and return the applied value."""
+        if new_beta is None or not isinstance(new_beta, (int, float)):
+            return self.config.beta_strength
+        clamped = float(max(self.baseline_beta_strength, min(self.max_beta_strength, new_beta)))
+        self.config.beta_strength = clamped
+        return clamped
+
+    def increase_beta_on_violation(self, repeats: int = 1) -> float:
+        """Increase beta multiplicatively when repeated violation occurs at same position."""
+        factor = self.beta_scale_factor ** max(1, int(repeats))
+        return self.set_beta_strength(self.config.beta_strength * factor)
+
+    def decay_beta(self) -> float:
+        """Decay beta strength toward baseline after successful steps."""
+        # Never go below baseline
+        target = max(self.baseline_beta_strength, self.config.beta_strength * self.beta_decay_factor)
+        self.config.beta_strength = float(target)
+        return self.config.beta_strength
+
+    def reset_beta(self) -> float:
+        """Hard reset beta to baseline."""
+        self.config.beta_strength = float(self.baseline_beta_strength)
+        return self.config.beta_strength
 
 
 def create_residual_injector(model,
