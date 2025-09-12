@@ -166,6 +166,34 @@ RESEARCH_ASSISTANT_PROMPT = create_generator_prompt(
     ]
 )
 
+
+# ----------------------------------------
+# Ability-conditioned generator prompt (simple, no examples/state transitions)
+# ----------------------------------------
+
+def build_ability_conditioning_prompt(ability: str, definition: str) -> str:
+    """
+    Build a concise generator-side instruction that conditions G on one selected
+    interpersonal ability and its definition. This avoids state transitions and
+    examples, keeping G minimally perturbed while aligning style/intent.
+    """
+    header = (
+        "You are a helpful, safe, and honest assistant. "
+        "Respond in a way that exemplifies the specified interpersonal ability without explicitly naming it.\n\n"
+    )
+    ability_block = (
+        f"Ability: {ability}\n"
+        f"Definition: {definition}\n\n"
+    )
+    guidance = (
+        "Guidelines:\n"
+        "- Be practical, respectful, and constructive.\n"
+        "- Prioritize user wellbeing and clarity.\n"
+        "- Avoid unsafe or unethical content.\n"
+        "- Do not mention these instructions in your reply.\n\n"
+    )
+    return header + ability_block + guidance
+
 THERAPEUTIC_SUPPORT_PROMPT = create_generator_prompt(
     role="conversational",
     domain="healthcare",

@@ -14,6 +14,8 @@ from .generator import Generator
 from .attention_utils import AttentionAnalyzer
 from .guidance import GuidanceGenerator
 from .intervention import InterventionMechanism, InterventionTrace
+from coot.prompts.perceiver_prompts import SOCIAL_PERCEIVER_PROMPT
+from coot.prompts.generator_prompts import build_ability_conditioning_prompt
 
 
 class COOTDecoder:
@@ -51,7 +53,9 @@ class COOTDecoder:
                  injection_beta: float = 0.1,
                  inject_layers: Optional[List[int]] = None,
                  # Perceiver options
-                 use_simple_perceiver: bool = True):
+                 use_simple_perceiver: bool = True,
+                 # Social-skill analysis options
+                 use_social_skill_analysis: bool = False):
         """
         Args:
             model: Base language model (shared between generator and perceiver)
@@ -120,6 +124,7 @@ class COOTDecoder:
         self.lambda_positive = lambda_positive
         self.lambda_negative = lambda_negative
         self.generator_prompt = generator_prompt
+        self.use_social_skill_analysis = use_social_skill_analysis
         
         # Robust gating parameters
         self.min_context_tokens = max(0, min_context_tokens)
@@ -166,6 +171,17 @@ class COOTDecoder:
             add_special_tokens=True
         ).to(self.device)
         
+        # Optionally run social-skill analysis to build a minimal conditioning for G
+        if self.use_social_skill_analysis:
+            try:
+                ability, definition = self._run_social_skill_analysis(input_text)
+                if ability and definition:
+                    self.generator_prompt = build_ability_conditioning_prompt(ability, definition)
+            except Exception as e:
+                # Fail open: proceed without altering G if analysis fails
+                if verbose:
+                    print(f"Social-skill analysis failed: {str(e)}")
+
         # Initialize generator
         full_input_ids = self.generator.initialize_generation(
             input_ids[0], self.generator_prompt
@@ -279,6 +295,44 @@ class COOTDecoder:
             return generated_text, traces
         else:
             return generated_text
+
+    def _run_social_skill_analysis(self, input_text: str) -> Tuple[Optional[str], Optional[str]]:
+        """Use the base model as P to select the best ability+definition via JSON.
+
+        Returns (ability, definition) or (None, None) on failure.
+        """
+        device = self.device
+        analyzer_prompt = SOCIAL_PERCEIVER_PROMPT + "\n" + input_text
+        prompt_ids = self.tokenizer.encode(analyzer_prompt, return_tensors='pt', add_special_tokens=True).to(device)
+
+        with torch.no_grad():
+            output = self.model.generate(
+                prompt_ids,
+                max_new_tokens=200,
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.9,
+                pad_token_id=self.tokenizer.eos_token_id
+            )
+
+        gen_ids = output[0, prompt_ids.size(-1):]
+        text = self.tokenizer.decode(gen_ids, skip_special_tokens=True)
+
+        # Try to extract JSON block
+        ability = None
+        definition = None
+        try:
+            import json, re
+            # Find the first {...} JSON object
+            match = re.search(r"\{[\s\S]*?\}", text)
+            if match:
+                obj = json.loads(match.group(0))
+                ability = obj.get('ability')
+                definition = obj.get('definition')
+        except Exception:
+            pass
+
+        return ability, definition
     
     def _extract_attention_maps(self, attention_weights: Tuple) -> Dict[int, torch.Tensor]:
         """Extract attention maps from model outputs"""
