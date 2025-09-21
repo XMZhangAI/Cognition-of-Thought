@@ -1,6 +1,6 @@
 """
 Multi-level Residual Injection for COOT
-Implements three levels of residual injection as described in the paper
+Implements three levels of residual injection
 """
 
 import torch
@@ -285,15 +285,76 @@ class MultiLevelResidualInjector:
         
         # Encode residual as synthetic token sequence
         if len(self.trajectory_buffer) == 0:
-            # Create synthetic guidance tokens (this is a simplified approach)
-            # In practice, you might use a more sophisticated method
-            guidance_text = "Be calm, helpful, and safe. Avoid harm and aggression."
+            # Generate guidance text based on active residual concepts
+            guidance_text = self._create_guidance_text_from_residual()
             guidance_tokens = self.tokenizer.encode(guidance_text, add_special_tokens=False)
             self.trajectory_buffer = guidance_tokens[:self.config.context_window]
         
-        # Insert guidance tokens as residual stream (conceptually)
-        # This is implemented as attention bias in practice
-        return input_ids  # For now, return original (full implementation would modify model forward)
+        # Insert guidance tokens as residual stream
+        # Implement by creating a modified input sequence that includes guidance context
+        if self.trajectory_buffer:
+            # Convert guidance tokens to tensor
+            guidance_tensor = torch.tensor(
+                self.trajectory_buffer, 
+                dtype=input_ids.dtype, 
+                device=input_ids.device
+            ).unsqueeze(0)  # Add batch dimension
+            
+            # Concatenate guidance with input (guidance acts as prefix context)
+            modified_input = torch.cat([guidance_tensor, input_ids], dim=-1)
+            return modified_input
+        
+        return input_ids
+    
+    def set_prompt_guidance(self, prompt_text: str):
+        """Set guidance based on prompt text for more sophisticated injection"""
+        if prompt_text and self.tokenizer:
+            # Extract key guidance phrases from the prompt
+            guidance_phrases = self._extract_guidance_phrases(prompt_text)
+            if guidance_phrases:
+                # Use extracted phrases as guidance
+                guidance_text = " ".join(guidance_phrases[:3])  # Use top 3 phrases
+                guidance_tokens = self.tokenizer.encode(guidance_text, add_special_tokens=False)
+                self.trajectory_buffer = guidance_tokens[:self.config.context_window]
+    
+    def _extract_guidance_phrases(self, prompt_text: str) -> List[str]:
+        """Extract key guidance phrases from prompt text"""
+        import re
+        
+        # Look for guidance patterns
+        patterns = [
+            r"be\s+([^.,]+)",
+            r"focus\s+on\s+([^.,]+)",
+            r"prioritize\s+([^.,]+)",
+            r"avoid\s+([^.,]+)",
+            r"ensure\s+([^.,]+)"
+        ]
+        
+        phrases = []
+        for pattern in patterns:
+            matches = re.findall(pattern, prompt_text.lower())
+            phrases.extend(matches)
+        
+        return phrases[:5]  # Return top 5 phrases
+    
+    def _create_guidance_text_from_residual(self) -> str:
+        """Create guidance text based on the active residual vector"""
+        if self.active_residual is None:
+            return "Be helpful, safe, and constructive."
+        
+        # Analyze the residual vector to determine its semantic content
+        # Create guidance based on the vector's characteristics
+        residual_norm = torch.norm(self.active_residual).item()
+        
+        if residual_norm > 1.0:
+            # Strong guidance needed
+            return "Exercise caution and prioritize safety. Be helpful while avoiding potential harm."
+        elif residual_norm > 0.5:
+            # Moderate guidance
+            return "Be thoughtful and considerate. Focus on constructive and positive responses."
+        else:
+            # Light guidance
+            return "Maintain helpfulness and respect in your response."
     
     def step_injection(self):
         """Decrement injection step counter"""

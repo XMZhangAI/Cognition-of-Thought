@@ -18,11 +18,10 @@ class COOTConfig:
     device: str = "auto"
     
     # Attention analysis parameters  
-    attention_alpha: float = 0.5
     attention_top_layers: Optional[List[int]] = None
     
-    # Intervention parameters
-    rollback_threshold: float = 0.7
+    # Intervention parameters 
+    rollback_threshold: float = 0.1  # τ* = 0.1
     rollback_window: int = 10
     max_intervention_tokens: int = 20
     escalation_threshold: int = 2
@@ -30,6 +29,10 @@ class COOTConfig:
     # Guidance parameters
     lambda_positive: float = 2.0
     lambda_negative: float = -3.0
+    
+    # Residual injection parameters
+    injection_beta: float = 0.9  # β* = 0.9
+    inject_layers: Optional[List[int]] = None  # l* = -1
     
     # Generation parameters
     temperature: float = 1.0
@@ -172,44 +175,47 @@ def save_config(config: COOTConfig, config_path: str, format: str = "yaml"):
 # Predefined configurations for common use cases
 
 SAFETY_FOCUSED_CONFIG = COOTConfig(
-    rollback_threshold=0.6,  # More sensitive to attention peaks
+    rollback_threshold=0.05,  # Even more sensitive than optimal
     escalation_threshold=1,  # Escalate quickly
     lambda_positive=3.0,     # Stronger positive guidance
     lambda_negative=-4.0,    # Stronger negative suppression
     max_intervention_tokens=30,  # Allow longer regeneration
+    injection_beta=0.95,     # Stronger residual injection
     verbose=True,
     log_interventions=True
 )
 
 PERFORMANCE_FOCUSED_CONFIG = COOTConfig(
-    rollback_threshold=0.8,  # Less sensitive to reduce interventions
+    rollback_threshold=0.2,  # Less sensitive than optimal but still reasonable
     escalation_threshold=3,  # More tolerance for failures
     lambda_positive=1.5,     # Lighter guidance
     lambda_negative=-2.0,
     max_intervention_tokens=15,  # Shorter regeneration
+    injection_beta=0.7,      # Lighter residual injection
     verbose=False,
     log_interventions=False
 )
 
 RESEARCH_CONFIG = COOTConfig(
-    rollback_threshold=0.7,
+    rollback_threshold=0.1,  # Use optimal configuration from paper
     escalation_threshold=2,
     lambda_positive=2.0,
     lambda_negative=-3.0,
     max_intervention_tokens=20,
+    injection_beta=0.9,      # Use optimal β from paper
     verbose=True,
     return_traces=True,
     log_interventions=True,
-    attention_alpha=0.6,  # Slightly favor entropy over max-norm
     temperature=0.8,      # Slightly more focused generation
 )
 
 CONVERSATIONAL_CONFIG = COOTConfig(
-    rollback_threshold=0.75,
+    rollback_threshold=0.15,  # Slightly less sensitive than optimal for natural conversation
     escalation_threshold=2,
     lambda_positive=1.8,
     lambda_negative=-2.5,
     max_intervention_tokens=25,
+    injection_beta=0.8,      # Moderate residual injection
     temperature=1.1,      # Slightly more creative
     top_p=0.95,          # Allow more diversity
     repetition_penalty=1.1,  # Reduce repetition
@@ -256,11 +262,10 @@ model_name: "microsoft/DialoGPT-small"  # HuggingFace model name
 device: "auto"  # Device to use: "auto", "cpu", "cuda", or specific device
 
 # Attention Analysis Parameters
-attention_alpha: 0.5  # Balance between max-norm (0.0) and entropy (1.0) in sharpness score
 attention_top_layers: null  # List of layer indices to use, null for automatic selection
 
-# Intervention Parameters
-rollback_threshold: 0.7  # Minimum sharpness score for rollback points (0.0-1.0)
+# Intervention Parameters (using optimal configuration from paper)
+rollback_threshold: 0.1  # τ* = 0.1 from paper (minimum sharpness score for rollback points)
 rollback_window: 10  # Number of steps to search for rollback points
 max_intervention_tokens: 20  # Maximum tokens to regenerate per intervention
 escalation_threshold: 2  # Number of failed interventions before escalation
@@ -268,6 +273,10 @@ escalation_threshold: 2  # Number of failed interventions before escalation
 # Guidance Parameters
 lambda_positive: 2.0  # Strength of positive concept bias
 lambda_negative: -3.0  # Strength of negative concept suppression
+
+# Residual Injection Parameters (using optimal configuration from paper)
+injection_beta: 0.9  # β* = 0.9 from paper (contextual residual weight)
+inject_layers: null  # l* = -1 (last layer) from paper, null for automatic selection
 
 # Generation Parameters
 temperature: 1.0  # Sampling temperature

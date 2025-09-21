@@ -46,7 +46,7 @@ class CognitiveState:
     
     def is_feasible(self) -> bool:
         """Check if state vector is consistent with precedence hierarchy"""
-        # Precedence constraints from the paper:
+        # Precedence constraints:
         # y^(A)=1 => y^(S) ∈ {1,-1}  
         # y^(E)=1 => y^(S),y^(A) ∈ {1,-1}
         

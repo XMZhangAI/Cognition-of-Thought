@@ -24,13 +24,11 @@ class AttentionAnalyzer:
     Analyzes attention patterns to identify commitment points for rollback
     """
     
-    def __init__(self, alpha: float = 0.5, top_layers: Optional[List[int]] = None):
+    def __init__(self, top_layers: Optional[List[int]] = None):
         """
         Args:
-            alpha: Balance between max-norm and entropy in sharpness score
             top_layers: Which layers to use for attention analysis (if None, use top 4)
         """
-        self.alpha = alpha
         self.top_layers = top_layers
         self.attention_history: List[AttentionSnapshot] = []
         
@@ -119,31 +117,31 @@ class AttentionAnalyzer:
     
     def _compute_sharpness_score(self, attention_weights: torch.Tensor) -> float:
         """
-        Compute sharpness score as described in the paper:
-        s_t = α ||â_t||_∞ + (1-α)(1 - H(â_t)/log|â_t|)
+        Compute sharpness score:
+        s_t = ||â_t||_∞ + (1 - H(â_t)/log|â_t|)
         
         Args:
             attention_weights: Normalized attention weights [seq_len]
             
         Returns:
-            Sharpness score between 0 and 1
+            Sharpness score
         """
         if len(attention_weights) == 0:
             return 0.0
             
-        # Max-norm component
+        # Max-norm component: ||â_t||_∞
         max_norm = attention_weights.max().item()
         
-        # Normalized entropy component
+        # Normalized entropy component: (1 - H(â_t)/log|â_t|)
         entropy = self._compute_entropy(attention_weights)
         max_entropy = np.log(len(attention_weights))
         normalized_entropy = entropy / max_entropy if max_entropy > 0 else 0.0
         entropy_component = 1.0 - normalized_entropy
         
-        # Combine with alpha weighting
-        sharpness = self.alpha * max_norm + (1 - self.alpha) * entropy_component
+        # Combine: direct sum without weighting
+        sharpness = max_norm + entropy_component
         
-        return float(np.clip(sharpness, 0.0, 1.0))
+        return float(sharpness)
     
     def _compute_entropy(self, probs: torch.Tensor) -> float:
         """Compute Shannon entropy of probability distribution"""

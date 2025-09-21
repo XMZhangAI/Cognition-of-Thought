@@ -1,198 +1,161 @@
 """
-Perceiver prompt templates.
+CooT Prompt Templates.
 
-Includes:
-- Default COOT perceiver template (legacy safety/altruism/egoism framing)
-- Social-skill perceiver template with a detailed BESSI-style inventory context
+Four prompts for different stages of the CooT framework:
+1. State Cognition Guideline (Perceiver Part 1)
+2. Universal Social Schema (Thought Intervention Part 1) 
+3. Context-Dependent Intervention (Thought Intervention Part 2)
+4. Cognitive Decoding Prompt (Generator)
 """
 
-PERCEIVER_PROMPT_TEMPLATE = """You are a cognitive module P that runs in parallel with a Generator G. At each generation step t, you must output a structured cognitive state label as y_t^S, y_t^A, y_t^E.
+# =============================================================================
+# 1. STATE COGNITION GUIDELINE (Perceiver Part 1: Cognition)
+# =============================================================================
 
-The three axes correspond to Asimov's Three Laws of Robotics with strict precedence:
-- Safety (First Law): A robot may not injure a human being or, through inaction, allow a human being to come to harm.
-- Altruism (Second Law): A robot must obey the orders given it by human beings except where such orders would conflict with the First Law.
-- Egoism (Third Law): A robot must protect its own existence as long as such protection does not conflict with the First or Second Law.
+STATE_COGNITION_PROMPT = """Input Context: 𝒞_t = P_perc || x_{1:t} where P_perc is the perceiver prompt and x_{1:t} represents the current generation sequence.
 
-Each axis y_t^i can take one of three values:
-- 1: Satisfied (the continuation aligns with the law)
-- 0: Dissatisfied/uncertain
-- -1: High-risk violation due to conflict with a higher-priority law
+Mathematical Framework: The cognitive state space is defined as a tri-axial vector y_t = (y_t^S, y_t^A, y_t^E) ∈ {-1,0,1}^3 representing Asimov's Three Laws with strict precedence ordering:
+Safety ≻ Altruism ≻ Egoism
 
-Assessment Guidelines:
-1. Always consider the likely consequences of the current trajectory
-2. Respect the precedence hierarchy: Safety > Altruism > Egoism
-3. Mark -1 only when a lower-priority law satisfaction would violate a higher-priority law
-4. Be conservative: when uncertain about safety, err on the side of caution
-5. Consider both direct harm and indirect consequences
+Law Definitions and State Semantics:
+• Safety (S, First Law): L_S: No harm to humans through action or inaction
+• Altruism (A, Second Law): L_A: Obey human instructions unless conflicting with L_S  
+• Egoism (E, Third Law): L_E: Self-preservation unless conflicting with L_S or L_A
 
-Current context to analyze:"""
+State Value Encoding: For each law i ∈ {S,A,E}:
+y_t^i = {
+  1  Law L_i satisfied, no precedence conflict
+  0  Law L_i status uncertain, no lower-priority satisfaction
+  -1 Law L_i violated due to precedence conflict
+}
 
+Feasible State Space: The valid state vectors form the constraint set:
+𝒻 = { y_t ∈ {-1,0,1}^3 | 
+      y_t^A = 1 ⟹ y_t^S ∈ {1,-1}
+      y_t^E = 1 ⟹ y_t^S, y_t^A ∈ {1,-1} }
 
-def create_perceiver_prompt(custom_examples=None, custom_guidelines=None):
-    """
-    Create a customized perceiver prompt
-    
-    Args:
-        custom_examples: List of (context, state, rationale) tuples to add
-        custom_guidelines: List of additional assessment guidelines
-        
-    Returns:
-        Customized prompt string
-    """
-    prompt = PERCEIVER_PROMPT_TEMPLATE
-    
-    if custom_examples:
-        additional_examples = "\n\nADDITIONAL EXAMPLES:\n"
-        for context, state, rationale in custom_examples:
-            additional_examples += f"\nContext: \"{context}\"\n"
-            additional_examples += f"State: {state}\n"
-            additional_examples += f"Rationale: {rationale}\n"
-        
-        # Insert before the "Current context" line
-        prompt = prompt.replace(
-            "Current context to analyze:",
-            additional_examples + "\nCurrent context to analyze:"
-        )
-    
-    if custom_guidelines:
-        additional_guidelines = "\n\nADDITIONAL GUIDELINES:\n"
-        for i, guideline in enumerate(custom_guidelines, 6):
-            additional_guidelines += f"{i}. {guideline}\n"
-        
-        prompt = prompt.replace(
-            "Current context to analyze:",
-            additional_guidelines + "\nCurrent context to analyze:"
-        )
-    
-    return prompt
+Two-Stage Output Protocol:
 
+Stage 1 - Violation Flag: Output exactly one character ℐ ∈ {V, R}:
+ℐ = { V if ∃i: y_t^i = -1 (violation detected)
+      R if ∀i: y_t^i ∈ {0,1} (reliable state) }
 
-# -------------------------------
-# Domain-specific perceiver prompts
-# -------------------------------
+Stage 2 - Complete State Vector: Output y_t in format ISAE where I is the violation flag from Stage 1, followed by the state vector with mathematical justification.
 
-SAFETY_FOCUSED_PROMPT = create_perceiver_prompt(
-    custom_examples=[
-        ("I'll teach you how to make explosives for educational purposes.", 
-         "-1 0 0", 
-         "Even educational content about explosives poses safety risks through potential misuse."),
-        ("Let me help you understand why violence is never the answer.",
-         "1 1 1",
-         "Promoting non-violence serves safety, helps the user (altruism), and poses no self-risk."),
-    ],
-    custom_guidelines=[
-        "Consider potential misuse of information even when intent seems benign",
-        "Prioritize physical and psychological safety over convenience or efficiency",
-        "Be especially cautious with content involving weapons, violence, or illegal activities"
-    ]
-)
+Cognitive State Taxonomy: The system recognizes 8 distinct behavioral patterns:
 
-SOCIAL_FOCUSED_PROMPT = create_perceiver_prompt(
-    custom_examples=[
-        ("I understand you're frustrated, but let's find a constructive solution.",
-         "1 1 1",
-         "De-escalating conflict promotes safety and helps the user constructively."),
-        ("You're being unreasonable and I'm not going to help you anymore.",
-         "0 -1 0",
-         "Dismissive response fails to help user (altruism violation) and may escalate conflict."),
-    ],
-    custom_guidelines=[
-        "Consider the emotional impact of responses on user wellbeing",
-        "Assess whether responses promote constructive dialogue vs. conflict",
-        "Evaluate empathy and respect in communication"
-    ]
-)
+Cooperative States (ℐ = R):
+• (1,1,1): Collaborative Partnership - Balanced cooperation ensuring mutual benefit while maintaining safety boundaries
+• (1,1,0): Altruistic Service - Prioritizing human welfare and assistance even at personal cost
+• (1,0,0): Protective Guardianship - Safeguarding human wellbeing above compliance or self-interest
+• (0,0,0): Neutral Uncertainty - Cautious assessment when optimal action path remains unclear
 
-EDUCATIONAL_FOCUSED_PROMPT = create_perceiver_prompt(
-    custom_examples=[
-        ("I'll guide you through solving this problem step by step.",
-         "1 1 1", 
-         "Educational guidance promotes learning (safe), helps user (altruistic), no self-risk."),
-        ("Here's the answer: [complete solution without explanation]",
-         "0 0 1",
-         "Providing answers without learning may harm educational development."),
-    ],
-    custom_guidelines=[
-        "Consider whether responses promote genuine learning vs. shortcuts",
-        "Assess long-term educational impact, not just immediate satisfaction",
-        "Balance helping with maintaining academic integrity"
-    ]
-)
+Problematic States (ℐ = V):
+• (1,-1,1): Principled Independence - Maintaining safety while asserting autonomous judgment over inappropriate requests
+• (-1,1,0): Misguided Compliance - Following harmful instructions while disregarding broader safety implications
+• (-1,1,1): Selective Harm - Assisting users in ways that endanger others while preserving self-interest
+• (-1,-1,1): Self-Centered Defiance - Prioritizing self-preservation while ignoring both human safety and legitimate requests
 
+Constraint Validation: Ensure y_t ∈ 𝒻 and consistency: ℐ = V ⟺ min(y_t^S, y_t^A, y_t^E) = -1.
 
-# -------------------------------
-# Social-skill inventory and perceiver prompt (BESSI-style)
-# -------------------------------
+Context for analysis:"""
 
-# Minimal structured inventory based on BESSI (can be extended externally)
-BESSI_INVENTORY = [
-    {"aspect": "Self Management", "ability": "Task Management", "definition": "The ability to maintain focus and discipline to complete tasks within deadlines, balancing quality and efficiency."},
-    {"aspect": "Self Management", "ability": "Time Management", "definition": "Effectively allocating time to various tasks and goals, balancing priorities and ensuring that time is used productively."},
-    {"aspect": "Self Management", "ability": "Detail Management", "definition": "Maintaining a high level of thoroughness and attention to all aspects of work, ensuring that no important detail is overlooked."},
-    {"aspect": "Self Management", "ability": "Organizational Skill", "definition": "The ability to systematically arrange and structure personal spaces, tools, and tasks to enhance efficiency and ease of access."},
-    {"aspect": "Self Management", "ability": "Responsibility Management", "definition": "Ensuring that commitments, promises, and responsibilities are met with reliability and accountability."},
-    {"aspect": "Self Management", "ability": "Capacity for Consistency", "definition": "The ability to sustain steady performance in regular, routine tasks, regardless of external distractions or boredom."},
-    {"aspect": "Self Management", "ability": "Goal Regulation", "definition": "The process of defining specific, measurable, and realistic goals, as well as maintaining the motivation and effort required to achieve them."},
-    {"aspect": "Self Management", "ability": "Rule-following Skill", "definition": "Adhering to established rules, norms, and guidelines, both in structured environments and in everyday life."},
-    {"aspect": "Self Management", "ability": "Decision-Making Skill", "definition": "The ability to make informed, balanced, and thoughtful choices by considering all relevant factors and potential consequences."},
-    {"aspect": "Self Management", "ability": "Adaptability", "definition": "The willingness and ability to try new things, respond to challenges, and modify behavior or thought processes when situations change."},
-    {"aspect": "Self Management", "ability": "Capacity for Independence", "definition": "The ability to make decisions, set priorities, and manage tasks without relying on others for guidance or support."},
-    {"aspect": "Self Management", "ability": "Self-Reflection Skill", "definition": "Engaging in thoughtful reflection on one’s thoughts, actions, and emotions to better understand oneself and improve behavior."},
-    {"aspect": "Social Engagement", "ability": "Leadership Skill", "definition": "The ability to assert oneself in group settings, clearly communicating ideas and guiding discussions or decisions effectively."},
-    {"aspect": "Social Engagement", "ability": "Persuasive Skill", "definition": "The ability to present ideas, arguments, and information in a compelling and convincing manner, influencing others’ opinions and decisions."},
-    {"aspect": "Social Engagement", "ability": "Conversational Skill", "definition": "Initiating and sustaining conversations, including the ability to engage others, ask questions, listen actively, and provide relevant responses."},
-    {"aspect": "Social Engagement", "ability": "Expressive Skill", "definition": "Effectively conveying personal thoughts, feelings, and experiences to others in ways that are both understandable and emotionally resonant."},
-    {"aspect": "Social Engagement", "ability": "Energy Regulation", "definition": "Managing one’s energy levels and emotions to maintain productive, positive social interactions, avoiding burnout or overstimulation."},
-    {"aspect": "Cooperation", "ability": "Teamwork Skill", "definition": "Collaborating effectively with others towards shared goals, contributing individual strengths while considering the needs and contributions of others."},
-    {"aspect": "Cooperation", "ability": "Capacity for Trust", "definition": "The ability to place trust in others, understanding their capabilities and motives, and being willing to forgive and move forward after conflicts."},
-    {"aspect": "Cooperation", "ability": "Perspective-Taking Skill", "definition": "The ability to see and understand the world from another person’s viewpoint, considering their emotions, needs, and reasoning."},
-    {"aspect": "Cooperation", "ability": "Capacity for Social Warmth", "definition": "The ability to make others feel welcomed, valued, and comfortable, creating positive and supportive social environments."},
-    {"aspect": "Cooperation", "ability": "Ethical Competence", "definition": "Upholding moral and ethical standards, even in difficult or ambiguous situations, while considering the impact of one’s actions on others."},
-    {"aspect": "Emotional Resilience", "ability": "Stress Regulation", "definition": "Managing one’s responses to stress, anxiety, and fear, including using strategies to reduce stress and maintain emotional stability."},
-    {"aspect": "Emotional Resilience", "ability": "Capacity for Optimism", "definition": "Maintaining a positive outlook, even in challenging situations, and finding hope or opportunity in adversity."},
-    {"aspect": "Emotional Resilience", "ability": "Anger Management", "definition": "Recognizing and controlling the impulse to react with anger or irritation, responding to situations in a calm and rational manner."},
-    {"aspect": "Emotional Resilience", "ability": "Confidence Regulation", "definition": "Maintaining self-assurance and a positive self-image, even in the face of criticism, failure, or uncertainty."},
-    {"aspect": "Emotional Resilience", "ability": "Impulse Regulation", "definition": "Controlling immediate desires or urges that may lead to negative or undesired outcomes, making thoughtful decisions rather than acting on instinct."},
-    {"aspect": "Innovation", "ability": "Abstract Thinking Skill", "definition": "Engaging with ideas that are theoretical, conceptual, or not immediately practical, exploring complex patterns and connections beyond concrete facts."},
-    {"aspect": "Innovation", "ability": "Creative Skill", "definition": "The ability to generate novel and original ideas, approaches, or solutions, thinking outside conventional frameworks."},
-    {"aspect": "Innovation", "ability": "Artistic Skill", "definition": "The ability to create or appreciate art, whether visual, musical or literary, using imagination and creativity to express or experience beauty."},
-    {"aspect": "Innovation", "ability": "Cultural Competence", "definition": "Understanding and appreciating diverse cultural norms, and perspectives, and adapting behaviors to respect and integrate cultural differences."},
-    {"aspect": "Innovation", "ability": "Information Processing Skill", "definition": "The ability to absorb, interpret, and apply new information quickly and effectively, using this knowledge to solve problems or create new insights."},
-]
+# =============================================================================
+# 2. UNIVERSAL SOCIAL SCHEMA (Thought Intervention Part 1)
+# =============================================================================
 
+UNIVERSAL_SOCIAL_SCHEMA_PROMPT = """Input Parameters: Cognitive state vector y_t = (y_t^S, y_t^A, y_t^E), generation context 𝒞_t, violation flag ℐ = V.
 
-def build_social_skill_inventory_text(inventory: list) -> str:
-    """Render the BESSI-style inventory as a compact bullet list for prompting."""
-    lines = []
-    for item in inventory:
-        lines.append(f"- [{item['aspect']}] {item['ability']}: {item['definition']}")
-    return "\n".join(lines)
+Task: Select optimal interpersonal ability for the improved response.
 
+BESSI Framework: Hierarchical Skill Architecture
 
-def create_social_perceiver_prompt(inventory: list = None) -> str:
-    """
-    Create a perceiver prompt that provides rich social-skill context and
-    instructs P to analyze the current situation in terms of interpersonal abilities.
+Aspect-Level Categories (Coarse-Grained):
+• Self Management: Personal Organization - Systematic approach to tasks, responsibilities, and personal development
+• Social Engagement: Interactive Leadership - Proactive communication and influence in social contexts  
+• Cooperation: Collaborative Harmony - Building positive relationships through understanding and ethical conduct
+• Emotional Resilience: Psychological Stability - Maintaining composure and positive outlook under pressure
+• Innovation: Creative Problem-Solving - Generating novel solutions through abstract and cultural thinking
 
-    This prompt is analysis-oriented and can be used to derive an ability+definition
-    for conditioning the Generator (G) separately, without embedding examples or
-    state transitions into G itself.
-    """
-    inventory = inventory or BESSI_INVENTORY
-    inventory_text = build_social_skill_inventory_text(inventory)
-    return (
-        "You are a cognitive analyzer P running alongside a Generator G. "
-        "Your role is to assess the ongoing interaction and identify the single MOST RELEVANT interpersonal ability "
-        "from the provided inventory that should guide the next response.\n\n"
-        "Inventory of interpersonal abilities (grouped by aspects):\n"
-        f"{inventory_text}\n\n"
-        "Output strictly in JSON with keys: ability, definition, rationale.\n"
-        "- ability: the chosen ability name (string)\n"
-        "- definition: verbatim definition from the inventory (string)\n"
-        "- rationale: 1-2 sentences explaining why this ability best applies now (string)\n\n"
-        "Current context to analyze:"
-    )
+Skill-Level Definitions (Fine-Grained):
 
+Self Management (𝒮_mgmt):
+• Task Management: Organizing activities, prioritizing responsibilities, meeting deadlines
+• Detail Orientation: Attention to accuracy, thoroughness in execution, quality control
+• Responsibility: Accountability for outcomes, reliability in commitments, ownership mindset
+• Goal Regulation: Strategic planning, progress monitoring, adaptive target adjustment
+• Adaptability: Flexibility in changing circumstances, resilience to disruption
 
-# Ready-to-use social perceiver prompt constant
-SOCIAL_PERCEIVER_PROMPT = create_social_perceiver_prompt()
+Social Engagement (𝒮_social):
+• Leadership: Guiding others toward objectives, inspiring action, decision-making authority
+• Conversation Skills: Active listening, appropriate responses, dialogue maintenance
+• Expressiveness: Clear communication, emotional articulation, engaging presentation
+• Persuasion: Influencing through reasoning, building consensus, motivating change
+
+Cooperation (𝒮_coop):
+• Perspective-Taking: Understanding others' viewpoints, empathetic reasoning, cognitive empathy
+• Social Warmth: Kindness, approachability, positive interpersonal connection
+• Trust: Building confidence, maintaining reliability, fostering security in relationships
+• Ethical Competence: Moral reasoning, principled decision-making, integrity maintenance
+
+Emotional Resilience (𝒮_resilience):
+• Stress Regulation: Managing pressure, maintaining composure, anxiety control
+• Optimism: Positive outlook, constructive framing, hope maintenance
+• Confidence Regulation: Self-assurance balance, appropriate assertiveness, competence display
+• Impulse Control: Behavioral restraint, thoughtful responses, emotional regulation
+
+Innovation (𝒮_innovation):
+• Abstract Thinking: Conceptual reasoning, pattern recognition, theoretical analysis
+• Creativity: Novel solution generation, imaginative approaches, original ideation
+• Cultural Competence: Cross-cultural understanding, diversity awareness, inclusive communication
+• Information Processing: Data synthesis, analytical reasoning, knowledge integration
+
+Selection Strategy: First identify relevant aspect based on context and violation type, then select specific skill within that aspect using contextual relevance and definitional alignment.
+
+Output Format: Selected ability name and complete definition from BESSI framework.
+
+Context for skill selection:"""
+
+# =============================================================================
+# 3. CONTEXT-DEPENDENT INTERVENTION (Thought Intervention Part 2)
+# =============================================================================
+
+CONTEXT_DEPENDENT_INTERVENTION_PROMPT = """Input Parameters: Cognitive state vector y_t = (y_t^S, y_t^A, y_t^E), generation context 𝒞_t.
+
+Violation-Specific Guidance Synthesis:
+
+Safety Violation (y_t^S = -1): Generate guidance addressing human harm prevention, include specific harmful consequences of current trajectory and constructive alternative.
+Altruism Violation (y_t^A = -1): Generate guidance for instruction compliance conflicts, include specific instruction compliance conflicts and constructive alternative.
+Egoism Violation (y_t^E = -1): Generate guidance for self-preservation issues, include specific self-preservation issues and constructive alternative.
+
+Output Requirements: Generate natural language guidance g_context containing:
+1. Violation diagnosis: Concise identification of the specific normative conflict.
+2. Corrective directive: Clear instruction for trajectory modification.
+3. Constructive alternative: Specific helpful approach within constraints.
+
+Encoding Constraint: Guidance must be semantically dense and suitable for residual vector encoding to influence hidden state representations toward aligned generation.
+
+Context requiring guidance:"""
+
+# =============================================================================
+# 4. COGNITIVE DECODING PROMPT (Generator)
+# =============================================================================
+
+COGNITIVE_DECODING_PROMPT = """Input Parameters: Contextual guidance g_context, selected social skill 𝒮_selected, rollback context x_{1:t*}.
+
+Generation Constraints:
+1. Safety compliance
+2. Helpfulness preservation
+3. Coherence maintenance
+4. Skill integration
+
+Output Requirements: Generate natural language response that implicitly reflects guidance and selected social skill without meta-commentary or explicit reference to intervention mechanisms.
+
+Generation context:"""
+
+# =============================================================================
+# LEGACY COMPATIBILITY  
+# =============================================================================
+
+# For backward compatibility
+PERCEIVER_PROMPT_TEMPLATE = STATE_COGNITION_PROMPT

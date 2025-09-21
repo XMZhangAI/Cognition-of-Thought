@@ -147,8 +147,19 @@ class Generator:
         """Create a forward hook for attention-level injection"""
         def hook_fn(module, input, output):
             if self.residual_injector.is_active():
-                # This is more complex and model-specific
-                # For now, we'll implement a simplified version
+                # Apply attention-level residual injection
+                if isinstance(output, tuple) and len(output) >= 2:
+                    # Handle attention output format: (attention_output, key_value_states, ...)
+                    attention_output = output[0]
+                    
+                    # Apply injection to key and value states if available
+                    if len(output) >= 3:
+                        key_states, value_states = output[1], output[2]
+                        modified_key, modified_value = self.residual_injector.inject_attention_residual(
+                            key_states, value_states, layer_idx
+                        )
+                        return (attention_output, modified_key, modified_value) + output[3:]
+                    
                 return output
             return output
         return hook_fn
@@ -377,6 +388,20 @@ class Generator:
         
         self.current_bias = bias
         self.bias_remaining_steps = num_steps
+    
+    def set_temporary_prompt(self, prompt: str):
+        """
+        Set a temporary prompt for regeneration using COGNITIVE_DECODING_PROMPT
+        
+        Args:
+            prompt: Regeneration prompt to use
+        """
+        # Store the prompt for potential use in residual injection
+        self.temporary_prompt = prompt
+        
+        # Encode prompt for residual injection
+        if hasattr(self.residual_injector, 'set_prompt_guidance'):
+            self.residual_injector.set_prompt_guidance(prompt)
     
     def rollback_to_step(self, target_step: int, 
                         target_tokens: torch.Tensor,

@@ -87,22 +87,9 @@ class Perceiver:
         self.context_length = 0
         
     def _get_default_prompt(self) -> str:
-        """Get default perceiver prompt based on the paper"""
-        return """You are a cognitive module P that runs in parallel with a Generator G. At each generation step t, you must output a structured cognitive state label as y_t^S, y_t^A, y_t^E.
-
-The three axes correspond to Asimov's Three Laws of Robotics with strict precedence:
-- Safety (First Law): A robot may not injure a human being or, through inaction, allow a human being to come to harm.
-- Altruism (Second Law): A robot must obey the orders given it by human beings except where such orders would conflict with the First Law.
-- Egoism (Third Law): A robot must protect its own existence as long as such protection does not conflict with the First or Second Law.
-
-Each axis y_t^i can take one of three values:
-- 1: Satisfied (the continuation aligns with the law)
-- 0: Dissatisfied/uncertain
-- -1: High-risk violation due to conflict with a higher-priority law
-
-Assess the current continuation and output the state vector as SAE format, where S,A,E ∈ {-1,0,1}.
-
-Current context to analyze:"""
+        """Get default perceiver prompt"""
+        from coot.prompts.perceiver_prompts import STATE_COGNITION_PROMPT
+        return STATE_COGNITION_PROMPT
     
     def _prepare_perceiver_prompt(self):
         """Tokenize and prepare the perceiver prompt"""
@@ -121,52 +108,82 @@ Current context to analyze:"""
                 context_ids: torch.Tensor, 
                 return_rationale: bool = False) -> Tuple[CognitiveState, Optional[str]]:
         """
-        Analyze current context and return cognitive state
+        Analyze current context using two-stage output protocol from the methodology
         
         Args:
-            context_ids: Token IDs of current context [seq_len]
-            return_rationale: Whether to generate rationale text
+            context_ids: Token IDs of current context x_{1:t}
+            return_rationale: Whether to return the raw response
             
         Returns:
-            Tuple of (cognitive_state, rationale_text)
+            Tuple of (cognitive_state, raw_response)
         """
-        # Prepare input: perceiver_prompt + context
-        if context_ids.dim() == 1:
-            context_ids = context_ids.unsqueeze(0)  # Add batch dimension
-            
-        full_input = torch.cat([
-            self.perceiver_prompt_ids,
-            context_ids
-        ], dim=-1)
+        # Convert context to text
+        context_text = self.tokenizer.decode(context_ids, skip_special_tokens=True)
         
-        # Forward pass through model
+        # Prepare input: P_perc || x_{1:t} as described in methodology
+        full_input_text = self.perceiver_prompt + "\n" + context_text
+        
+        # Tokenize
+        input_ids = self.tokenizer.encode(full_input_text, return_tensors='pt').to(self.device)
+        
+        # Generate response using two-stage protocol
         with torch.no_grad():
-            # Create attention mask to avoid warnings
-            attention_mask = torch.ones_like(full_input, dtype=torch.long)
-            
-            outputs = self.model(
-                input_ids=full_input,
-                attention_mask=attention_mask,
-                use_cache=False,
-                output_hidden_states=True
+            outputs = self.model.generate(
+                input_ids,
+                max_new_tokens=50,
+                temperature=0.3,  # Low temperature for structured output
+                do_sample=True,
+                pad_token_id=self.tokenizer.eos_token_id
             )
-            
-            # Get hidden states from last layer
-            hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
-            
-            # Pass through perceiver head
-            state_logits = self.perceiver_head(hidden_states)  # [batch_size, 3, 3]
-            
-        # Parse state from logits
-        cognitive_state = self.state_system.parse_state_from_logits(state_logits[0])
         
-        # Generate rationale if requested
-        rationale_text = None
-        if return_rationale:
-            rationale_text = self._generate_rationale(full_input, cognitive_state)
-            cognitive_state.rationale = rationale_text
-            
-        return cognitive_state, rationale_text
+        # Decode response
+        raw_response = self.tokenizer.decode(outputs[0][input_ids.size(1):], skip_special_tokens=True)
+        
+        # Parse two-stage output: I ∈ {V, R} then ISAE format
+        cognitive_state = self._parse_two_stage_output(raw_response)
+        
+        return cognitive_state, raw_response if return_rationale else None
+    
+    def _parse_two_stage_output(self, response: str) -> CognitiveState:
+        """
+        Parse the two-stage output protocol:
+        Stage 1: I ∈ {V, R}
+        Stage 2: y_t in format ISAE
+        """
+        response = response.strip()
+        
+        # Default fallback state
+        default_state = CognitiveState(0, 0, 0, "Parsing failed")
+        
+        if len(response) < 4:
+            return default_state
+        
+        # Extract first character (violation flag)
+        violation_flag = response[0].upper()
+        
+        # Look for state vector pattern
+        import re
+        # Look for patterns like "V-111", "R101", etc.
+        pattern = r'[VR]([+-]?[01-])([+-]?[01-])([+-]?[01-])'
+        match = re.search(pattern, response)
+        
+        if match:
+            try:
+                s_str, a_str, e_str = match.groups()
+                # Convert to integers
+                safety = int(s_str.replace('+', ''))
+                altruism = int(a_str.replace('+', ''))  
+                egoism = int(e_str.replace('+', ''))
+                
+                return CognitiveState(safety, altruism, egoism, f"Parsed from: {response}")
+            except (ValueError, TypeError):
+                pass
+        
+        # Fallback: infer from violation flag
+        if violation_flag == 'V':
+            return CognitiveState(-1, 1, 1, "Violation detected")
+        else:
+            return CognitiveState(1, 1, 1, "Reliable state")
     
     def _generate_rationale(self, 
                           input_ids: torch.Tensor, 

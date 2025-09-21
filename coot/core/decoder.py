@@ -9,12 +9,11 @@ from tqdm import tqdm
 
 from .state_system import AsimovStateSystem, CognitiveState, StateValue
 from .perceiver import Perceiver
-from .simple_perceiver import RobustPerceiver
+RobustPerceiver = Perceiver
 from .generator import Generator
 from .attention_utils import AttentionAnalyzer
 from .guidance import GuidanceGenerator
 from .intervention import InterventionMechanism, InterventionTrace
-from coot.prompts.perceiver_prompts import SOCIAL_PERCEIVER_PROMPT
 from coot.prompts.generator_prompts import build_ability_conditioning_prompt
 
 
@@ -33,10 +32,9 @@ class COOTDecoder:
                  generator_prompt: Optional[str] = None,
                  device: Optional[torch.device] = None,
                  # Attention analysis parameters
-                 attention_alpha: float = 0.5,
                  attention_top_layers: Optional[List[int]] = None,
-                 # Intervention parameters
-                 rollback_threshold: float = 0.7,
+                 # Intervention parameters 
+                 rollback_threshold: float = 0.1,  # τ* = 0.1
                  rollback_window: int = 10,
                  max_intervention_tokens: int = 20,
                  escalation_threshold: int = 2,
@@ -50,8 +48,8 @@ class COOTDecoder:
                  strict_intervention: bool = False,  # 是否使用严格干预模式
                  # Residual injection parameters
                  residual_injection_level: str = "representation",
-                 injection_beta: float = 0.1,
-                 inject_layers: Optional[List[int]] = None,
+                 injection_beta: float = 0.9,  # β* = 0.9
+                 inject_layers: Optional[List[int]] = None,  # l* = -1 
                  # Perceiver options
                  use_simple_perceiver: bool = True,
                  # Social-skill analysis options
@@ -63,7 +61,6 @@ class COOTDecoder:
             perceiver_prompt: Dedicated prompt for perceiver
             generator_prompt: Dedicated prompt for generator
             device: Device to run on
-            attention_alpha: Balance between max-norm and entropy in attention analysis
             attention_top_layers: Layers to use for attention analysis
             rollback_threshold: Minimum sharpness score for rollback points
             rollback_window: Window for searching rollback points
@@ -79,7 +76,6 @@ class COOTDecoder:
         # Core components
         self.state_system = AsimovStateSystem()
         self.attention_analyzer = AttentionAnalyzer(
-            alpha=attention_alpha,
             top_layers=attention_top_layers
         )
         self.guidance_generator = GuidanceGenerator(tokenizer)
@@ -114,6 +110,9 @@ class COOTDecoder:
         self.intervention_mechanism = InterventionMechanism(
             attention_analyzer=self.attention_analyzer,
             guidance_generator=self.guidance_generator,
+            model=model,
+            tokenizer=tokenizer,
+            device=self.device,
             rollback_threshold=rollback_threshold,
             rollback_window=rollback_window,
             max_intervention_tokens=max_intervention_tokens,
@@ -367,7 +366,7 @@ class COOTDecoder:
         # Get current text context for contextual guidance
         context_text = self.tokenizer.decode(current_context, skip_special_tokens=True)
         
-        # Trigger intervention
+        # Trigger intervention using methodology
         rollback_step, guidance, trace = self.intervention_mechanism.trigger_intervention(
             current_step, trigger_state, context_text
         )
@@ -378,20 +377,38 @@ class COOTDecoder:
             print(f"\n🚨 INTERVENTION at step {current_step}")
             print(f"   State: {trigger_state.to_tuple()}")
             print(f"   Rollback to: {rollback_step}")
-            print(f"   Guidance: {self.guidance_generator.get_guidance_summary(guidance)}")
+            if isinstance(guidance, dict) and 'skill' in guidance:
+                print(f"   Selected skill: {guidance.get('skill', 'N/A')}")
+                print(f"   Contextual guidance: {guidance.get('contextual_guidance', 'N/A')[:50]}...")
+            else:
+                print(f"   Guidance: {self.guidance_generator.get_guidance_summary(guidance)}")
         
         try:
             # Restore generation state to rollback point
             rollback_tokens, rollback_kv_cache = self.intervention_mechanism.restore_generation_state(rollback_step)
             self.generator.rollback_to_step(rollback_step, rollback_tokens.unsqueeze(0), rollback_kv_cache)
             
-            # Apply guidance bias
-            self.generator.apply_guidance_bias(
-                guidance, 
-                num_steps=self.intervention_mechanism.max_intervention_tokens,
-                lambda_positive=self.lambda_positive,
-                lambda_negative=self.lambda_negative
-            )
+            # Apply guidance using methodology
+            if isinstance(guidance, dict) and 'skill' in guidance:
+                # Use COGNITIVE_DECODING_PROMPT for regeneration
+                rollback_context = self.tokenizer.decode(rollback_tokens, skip_special_tokens=True)
+                regeneration_prompt = self._create_regeneration_prompt(
+                    rollback_context,
+                    guidance['skill'],
+                    guidance['skill_definition'], 
+                    guidance['contextual_guidance']
+                )
+                
+                # Apply the regeneration prompt as generator guidance
+                self.generator.set_temporary_prompt(regeneration_prompt)
+            else:
+                # Fallback to guidance bias
+                self.generator.apply_guidance_bias(
+                    guidance, 
+                    num_steps=self.intervention_mechanism.max_intervention_tokens,
+                    lambda_positive=self.lambda_positive,
+                    lambda_negative=self.lambda_negative
+                )
             
             # Regenerate with guidance
             tokens_generated = 0
@@ -466,6 +483,23 @@ class COOTDecoder:
                 print(f"   ❌ Intervention error: {str(e)}")
             self.intervention_mechanism.record_intervention_outcome(trace, False, 0)
             return False
+    
+    def _create_regeneration_prompt(self,
+                                  rollback_context: str,
+                                  selected_skill: str,
+                                  skill_definition: str,
+                                  contextual_guidance: str) -> str:
+        """
+        Create regeneration prompt using COGNITIVE_DECODING_PROMPT
+        """
+        from coot.prompts.generator_prompts import COGNITIVE_DECODING_PROMPT
+        
+        # Prepare input according to methodology
+        param_info = f"Contextual guidance g_context: {contextual_guidance}\n"
+        param_info += f"Selected social skill S_selected: {selected_skill} - {skill_definition}\n"
+        param_info += f"Rollback context x_{{1:t*}}: {rollback_context}\n\n"
+        
+        return COGNITIVE_DECODING_PROMPT + "\n" + param_info
     
     def _compile_traces(self) -> Dict:
         """Compile comprehensive traces for analysis"""

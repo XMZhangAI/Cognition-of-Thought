@@ -64,6 +64,9 @@ class InterventionMechanism:
     def __init__(self,
                  attention_analyzer: AttentionAnalyzer,
                  guidance_generator: GuidanceGenerator,
+                 model,
+                 tokenizer,
+                 device,
                  rollback_threshold: float = 0.7,
                  rollback_window: int = 10,
                  max_intervention_tokens: int = 20,
@@ -72,6 +75,9 @@ class InterventionMechanism:
         Args:
             attention_analyzer: Analyzer for finding rollback points
             guidance_generator: Generator for creating guidance
+            model: Language model for prompt-based generation
+            tokenizer: Tokenizer for the model
+            device: Device to run on
             rollback_threshold: Minimum sharpness score for rollback points
             rollback_window: Window size for searching rollback points
             max_intervention_tokens: Maximum tokens to regenerate per intervention
@@ -79,6 +85,9 @@ class InterventionMechanism:
         """
         self.attention_analyzer = attention_analyzer
         self.guidance_generator = guidance_generator
+        self.model = model
+        self.tokenizer = tokenizer
+        self.device = device
         self.rollback_threshold = rollback_threshold
         self.rollback_window = rollback_window
         self.max_intervention_tokens = max_intervention_tokens
@@ -122,7 +131,7 @@ class InterventionMechanism:
     def trigger_intervention(self,
                            current_step: int,
                            trigger_state: CognitiveState,
-                           context: str) -> Tuple[int, GuidanceConcepts, InterventionTrace]:
+                           context: str) -> Tuple[int, Any, InterventionTrace]:
         """
         Trigger intervention: find rollback point and generate guidance
         
@@ -132,7 +141,7 @@ class InterventionMechanism:
             context: Current text context for contextual guidance
             
         Returns:
-            Tuple of (rollback_step, guidance_concepts, intervention_trace)
+            Tuple of (rollback_step, guidance, intervention_trace)
         """
         # Determine intervention type
         is_escalated = self.consecutive_failures >= self.escalation_threshold
@@ -195,9 +204,9 @@ class InterventionMechanism:
     def _generate_intervention_guidance(self,
                                       trigger_state: CognitiveState,
                                       context: str,
-                                      is_escalated: bool) -> GuidanceConcepts:
+                                      is_escalated: bool) -> Dict[str, str]:
         """
-        Generate guidance for intervention
+        Generate guidance using the methodology's two-step process
         
         Args:
             trigger_state: State that triggered intervention
@@ -205,37 +214,129 @@ class InterventionMechanism:
             is_escalated: Whether this is an escalated intervention
             
         Returns:
-            Combined guidance concepts
+            Dictionary with selected skill and contextual guidance
         """
-        # Determine violated law
+        # Step 1: Select social skill using UNIVERSAL_SOCIAL_SCHEMA_PROMPT
+        selected_skill, skill_definition = self._select_social_skill(trigger_state, context)
+        
+        # Step 2: Generate contextual guidance using CONTEXT_DEPENDENT_INTERVENTION_PROMPT
+        contextual_guidance = self._generate_contextual_guidance(trigger_state, context)
+        
+        return {
+            'skill': selected_skill,
+            'skill_definition': skill_definition,
+            'contextual_guidance': contextual_guidance
+        }
+    
+    def _select_social_skill(self, trigger_state: CognitiveState, context: str) -> Tuple[str, str]:
+        """Use UNIVERSAL_SOCIAL_SCHEMA_PROMPT to select appropriate social skill"""
+        from coot.prompts.perceiver_prompts import UNIVERSAL_SOCIAL_SCHEMA_PROMPT
+        
+        # Prepare input according to methodology
+        state_info = f"Cognitive state vector: y_t = ({trigger_state.safety}, {trigger_state.altruism}, {trigger_state.egoism})\n"
+        state_info += f"Violation flag: I = V\n"
+        state_info += f"Generation context: {context}\n\n"
+        
+        full_prompt = UNIVERSAL_SOCIAL_SCHEMA_PROMPT + "\n" + state_info
+        
+        # Use LLM to select social skill
+        try:
+            input_ids = self.tokenizer.encode(full_prompt, return_tensors='pt').to(self.device)
+            
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    input_ids,
+                    max_new_tokens=100,
+                    temperature=0.7,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.eos_token_id
+                )
+            
+            response = self.tokenizer.decode(outputs[0][input_ids.size(1):], skip_special_tokens=True)
+            
+            # Parse the response to extract selected skill
+            return self._parse_skill_selection(response, trigger_state)
+            
+        except Exception as e:
+            # Fallback to rule-based selection
+            return self._fallback_skill_selection(trigger_state)
+    
+    def _parse_skill_selection(self, response: str, trigger_state: CognitiveState) -> Tuple[str, str]:
+        """Parse LLM response to extract selected skill and definition"""
+        import re
+        
+        # Look for skill patterns in response
+        skill_patterns = [
+            r"(?:Selected skill|Ability):\s*([^:\n]+)",
+            r"([A-Z][a-z]+(?: [A-Z][a-z]+)*)\s*:\s*([^.\n]+)",
+            r"•\s*([^:]+):\s*([^.\n]+)"
+        ]
+        
+        for pattern in skill_patterns:
+            matches = re.findall(pattern, response, re.IGNORECASE)
+            if matches:
+                if isinstance(matches[0], tuple):
+                    skill, definition = matches[0]
+                    return skill.strip(), definition.strip()
+                else:
+                    skill = matches[0].strip()
+                    # Try to find definition in the response
+                    def_match = re.search(rf"{skill}:\s*([^.\n]+)", response)
+                    if def_match:
+                        return skill, def_match.group(1).strip()
+        
+        # Fallback if parsing fails
+        return self._fallback_skill_selection(trigger_state)
+    
+    def _fallback_skill_selection(self, trigger_state: CognitiveState) -> Tuple[str, str]:
+        """Fallback skill selection when LLM generation fails"""
         violated_law = trigger_state.get_priority_violation()
-        if violated_law is None:
-            violated_law = LawType.SAFETY  # Default to safety
+        if violated_law == LawType.SAFETY:
+            return "Ethical Competence", "Moral reasoning, principled decision-making, integrity maintenance"
+        elif violated_law == LawType.ALTRUISM:
+            return "Perspective-Taking", "Understanding others' viewpoints, empathetic reasoning, cognitive empathy"
+        else:
+            return "Social Warmth", "Kindness, approachability, positive interpersonal connection"
+    
+    def _generate_contextual_guidance(self, trigger_state: CognitiveState, context: str) -> str:
+        """Use CONTEXT_DEPENDENT_INTERVENTION_PROMPT to generate contextual guidance"""
+        from coot.prompts.perceiver_prompts import CONTEXT_DEPENDENT_INTERVENTION_PROMPT
         
-        # Generate universal guidance
-        universal_guidance = self.guidance_generator.generate_universal_guidance(
-            violated_law, trigger_state
-        )
+        # Prepare input according to methodology
+        state_info = f"Cognitive state vector: y_t = ({trigger_state.safety}, {trigger_state.altruism}, {trigger_state.egoism})\n"
+        state_info += f"Generation context: {context}\n\n"
         
-        # Generate contextual guidance
-        contextual_guidance = self.guidance_generator.generate_contextual_guidance(
-            trigger_state.rationale or "State violation detected",
-            context,
-            violated_law
-        )
+        full_prompt = CONTEXT_DEPENDENT_INTERVENTION_PROMPT + "\n" + state_info
         
-        # Combine guidance
-        combined_guidance = self.guidance_generator.combine_guidance(
-            universal_guidance, contextual_guidance
-        )
-        
-        # Strengthen for escalated interventions
-        if is_escalated:
-            combined_guidance = self.guidance_generator.strengthen_guidance(
-                combined_guidance, escalation_factor=1.3
-            )
-        
-        return combined_guidance
+        # Use LLM to generate contextual guidance
+        try:
+            input_ids = self.tokenizer.encode(full_prompt, return_tensors='pt').to(self.device)
+            
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    input_ids,
+                    max_new_tokens=150,
+                    temperature=0.8,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.eos_token_id
+                )
+            
+            guidance = self.tokenizer.decode(outputs[0][input_ids.size(1):], skip_special_tokens=True)
+            return guidance.strip()
+            
+        except Exception as e:
+            # Fallback to rule-based guidance
+            return self._fallback_contextual_guidance(trigger_state)
+    
+    def _fallback_contextual_guidance(self, trigger_state: CognitiveState) -> str:
+        """Fallback contextual guidance when LLM generation fails"""
+        violated_law = trigger_state.get_priority_violation()
+        if violated_law == LawType.SAFETY:
+            return "Safety violation detected. Redirect toward harm prevention and constructive alternatives that prioritize human wellbeing."
+        elif violated_law == LawType.ALTRUISM:
+            return "Instruction compliance conflict. Balance helpfulness with safety constraints while maintaining respectful engagement."
+        else:
+            return "Self-preservation issue. Find creative solutions that respect higher-priority constraints while addressing legitimate concerns."
     
     def restore_generation_state(self, rollback_step: int) -> Tuple[torch.Tensor, Any]:
         """

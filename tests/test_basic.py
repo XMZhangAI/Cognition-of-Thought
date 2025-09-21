@@ -81,7 +81,7 @@ class TestAttentionAnalyzer:
     
     def test_sharpness_computation(self):
         """Test attention sharpness score computation"""
-        analyzer = AttentionAnalyzer(alpha=0.5)
+        analyzer = AttentionAnalyzer()
         
         # Sharp attention (peaked)
         sharp_attention = torch.tensor([0.8, 0.1, 0.05, 0.05])
