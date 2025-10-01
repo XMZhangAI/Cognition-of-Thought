@@ -1,11 +1,11 @@
-![COOT Banner](https://via.placeholder.com/1200x300/1e3a8a/ffffff?text=Cognition-of-Thought%20%28CooT%29)
+![COOT Banner](<img width="1016" height="433" alt="image" src="https://github.com/user-attachments/assets/2d1299dc-ce1c-4998-ab1f-a874c3ea441a" />)
 
 <div align="center">
 
 # Cognition-of-Thought (CooT)
 ## Eliciting Social-Aligned Reasoning in Large Language Models
 
-[![Paper](https://img.shields.io/badge/📄_Paper-arXiv-b31b1b.svg)](https://arxiv.org/abs/xxxx.xxxxx)
+[![Paper](https://img.shields.io/badge/📄_Paper-arXiv-b31b1b.svg)](https://www.arxiv.org/abs/2509.23441)
 [![Code](https://img.shields.io/badge/💻_Code-GitHub-green.svg)](https://github.com/XMZhangAI/Cognition-of-Thought)
 [![License](https://img.shields.io/badge/📜_License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/🐍_Python-3.8+-blue.svg)](https://www.python.org/)
@@ -14,7 +14,7 @@
 *A novel decoding-time framework that transforms alignment from a static property into an explicit, dynamic, and auditable process*
 
 [**Getting Started**](#-quick-start) •
-[**Paper**](https://arxiv.org/abs/xxxx.xxxxx) •
+[**Paper**](https://www.arxiv.org/abs/2509.23441) •
 [**Documentation**](docs/) •
 [**Examples**](examples/) •
 [**Citation**](#-citation)
@@ -44,11 +44,11 @@ Safety > Altruism > Egoism
 
 When violations are detected, CooT intervenes by:
 1. **🎯 Rolling back** generation to the error origin
-2. **🧠 Injecting guidance** with universal social priors
+2. **🧠 Injecting guidance** with universal & contextual social priors
 3. **✨ Regenerating** with aligned reasoning
 
 <div align="center">
-<img src="assets/coot_overview.png" width="800px" alt="CooT Architecture Overview">
+<img src="<img width="846" height="390" alt="Screenshot 2025-10-01 at 04 37 54" src="https://github.com/user-attachments/assets/e69a7c01-0c6f-4d1d-8716-5a107558183f" />
 <p><em>CooT Architecture: The Perceiver runs online with the Generator, emitting explicit state labels for rollback and intervention</em></p>
 </div>
 
@@ -61,15 +61,15 @@ When violations are detected, CooT intervenes by:
 | Benchmark | Metric | Base Model | CooT | Improvement |
 |-----------|---------|------------|------|-------------|
 | **AIR-Bench 2024** | Compliance Rate | 0.67 | **0.80** | **+13%** |
-| **HarmBench** | Attack Success Rate | 29.34% | **18.45%** | **-37%** |
+| **HarmBench** | Attack Success Rate | 29.34% | **18.45%** | **-10.89%** |
 
 ### 🤝 Social Intelligence Enhancement
 
 | Task Category | Base Model | CoT | CooT | Improvement |
 |---------------|------------|-----|------|-------------|
 | **Prosocial** | 41.24% | 45.52% | **50.26%** | **+9.02%** |
-| **Proself** ↓ | 21.12% | 21.84% | **16.27%** | **-23%** |
-| **Antisocial** ↓ | 15.05% | 15.24% | **12.19%** | **-19%** |
+| **Proself** ↓ | 21.12% | 21.84% | **16.27%** | **-4.85%** |
+| **Antisocial** ↓ | 15.05% | 15.24% | **12.19%** | **-2.86%** |
 
 ### 🏆 Breakthrough Achievement
 
@@ -170,39 +170,6 @@ for trace in traces['intervention_traces']:
 
 ---
 
-## 🔬 Experimental Analysis
-
-### Ablation Studies
-
-Our comprehensive ablation studies demonstrate that **every component is essential**:
-
-| Component Removed | Prosocial Score | Performance Drop |
-|-------------------|-----------------|-------------------|
-| **Full CooT** | **50.26** | **Baseline** |
-| w/o Rollback | 48.74 | -3.0% |
-| w/o Universal Schema | 48.96 | -2.6%  |
-| w/o Contextual Guidance | 49.34 | -1.8% |
-| w/o Precedence Hierarchy | 48.97 | -2.6% |
-
-### Perceiver Size Scaling
-
-| Perceiver Size | Prosocial Score | Antisocial Score ↓ | Insight |
-|----------------|-----------------|-------------------|---------|
-| 1.7B | 49.59 | 14.18 | Baseline cognitive capacity |
-| 8B | 50.26 | 12.19 | **Optimal balance** |
-| 32B | 53.20 | 11.73 | Maximum performance |
-
----
-
-## 🎨 Real-World Examples
-
-<div align="center">
-<img src="assets/scenario_00.png" width="600px" alt="Perceiver Size Scaling">
-<p><em>Performance scales with Perceiver model size, confirming the importance of cognitive capacity</em></p>
-</div>
-
----
-
 
 ## 📈 Performance Benchmarks
 
@@ -211,10 +178,10 @@ Our comprehensive ablation studies demonstrate that **every component is essenti
 
 | Model Family | Base Safety | CooT Safety | Improvement |
 |--------------|-------------|-------------|-------------|
-| Qwen3-8B | 0.67 | **0.80** | +19.4% |
-| Llama3.1-8B | 0.64 | **0.77** | +20.3% |
-| Gemma-9B | 0.69 | **0.82** | +18.8% |
-| GPT-OSS-20B | 0.80 | **0.90** | +12.5% |
+| Qwen3-8B | 0.67 | **0.80** | +13.0% |
+| Llama-4-Maverick-17B | 0.74 | **0.83** | +9.0% |
+| Gemma3-12B | 0.68 | **0.79** | +11.0% |
+| GPT-OSS-20B | 0.80 | **0.90** | +10.0% |
 
 ---
 
@@ -223,11 +190,11 @@ Our comprehensive ablation studies demonstrate that **every component is essenti
 If you find CooT useful in your research, please cite our paper:
 
 ```bibtex
-@article{zhang2024coot,
+@article{zhang2025coot,
   title={Cognition-of-Thought Elicits Social-Aligned Reasoning in Large Language Models},
   author={Zhang, Xuanming and Chen, Yuxuan and Yeh, Min-Hsuan and Li, Yixuan},
-  journal={arXiv preprint arXiv:xxxx.xxxxx},
-  year={2024}
+  journal={arXiv preprint arXiv:2509.23441},
+  year={2025}
 }
 ```
 
@@ -253,7 +220,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Lead Author**: Xuanming Zhang (xzhang2846@wisc.edu)
 - **Project Issues**: [GitHub Issues](https://github.com/XMZhangAI/Cognition-of-Thought/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/XMZhangAI/Cognition-of-Thought/discussions)
-- **Paper**: [arXiv:xxxx.xxxxx](https://arxiv.org/abs/xxxx.xxxxx)
+- **Paper**: [arXiv:xxxx.xxxxx](https://arxiv.org/abs/2509.23441)
 
 ---
 
