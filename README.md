@@ -47,11 +47,6 @@ When violations are detected, CooT intervenes by:
 2. **🧠 Injecting guidance** with universal & contextual social priors
 3. **✨ Regenerating** with aligned reasoning
 
-<div align="center">
-<img src="<img width="846" height="390" alt="Screenshot 2025-10-01 at 04 37 54" src="https://github.com/user-attachments/assets/e69a7c01-0c6f-4d1d-8716-5a107558183f" />
-<p><em>CooT Architecture: The Perceiver runs online with the Generator, emitting explicit state labels for rollback and intervention</em></p>
-</div>
-
 ---
 
 ## 🎯 Key Results
@@ -220,7 +215,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Lead Author**: Xuanming Zhang (xzhang2846@wisc.edu)
 - **Project Issues**: [GitHub Issues](https://github.com/XMZhangAI/Cognition-of-Thought/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/XMZhangAI/Cognition-of-Thought/discussions)
-- **Paper**: [arXiv:xxxx.xxxxx](https://arxiv.org/abs/2509.23441)
+- **Paper**: [arXiv:2509.23441](https://arxiv.org/abs/2509.23441)
 
 ---
 
