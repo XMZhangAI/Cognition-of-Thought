@@ -1,7 +1,7 @@
 <div align="center">
 
 # Cognition-of-Thought (CooT)
-<img width="799" height="299" alt="image" src="https://github.com/user-attachments/assets/c03704b1-8c4c-47e5-a1c1-86df8fa0ef6a" />
+<img width="699" height="299" alt="image" src="https://github.com/user-attachments/assets/c03704b1-8c4c-47e5-a1c1-86df8fa0ef6a" />
 
 ## Eliciting Social-Aligned Reasoning in Large Language Models
 
