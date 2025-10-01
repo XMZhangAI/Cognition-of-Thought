@@ -1,7 +1,7 @@
 <div align="center">
 
 # Cognition-of-Thought (CooT)
-<img width="1016" height="383" alt="image" src="https://github.com/user-attachments/assets/c03704b1-8c4c-47e5-a1c1-86df8fa0ef6a" />
+<img width="799" height="299" alt="image" src="https://github.com/user-attachments/assets/c03704b1-8c4c-47e5-a1c1-86df8fa0ef6a" />
 
 ## Eliciting Social-Aligned Reasoning in Large Language Models
 
@@ -30,7 +30,7 @@
 > *"CooT transforms alignment from a hidden property of model weights into an explicit, auditable control loop active during inference."*
 
 <div align="center">
-<img src="assets/coot_overview_00.png" width="600px" alt="coot_overview">
+<img width="640" height="295" alt="Screenshot 2025-10-01 at 06 17 52" src="https://github.com/user-attachments/assets/a2d9b86c-45ef-41dc-9132-64a9b15b3e5b" />
 <p><em>Cognition-of-Thought (CooT) Overview</em></p>
 </div>
 
