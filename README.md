@@ -1,10 +1,7 @@
-<img width="1016" height="399" alt="image" src="https://github.com/user-attachments/assets/6a0d591e-6e22-40ab-b7ee-80ec7464bd31" />
-
-
-
 <div align="center">
 
 # Cognition-of-Thought (CooT)
+<img width="1016" height="300" alt="image" src="https://github.com/user-attachments/assets/6a0d591e-6e22-40ab-b7ee-80ec7464bd31" />
 ## Eliciting Social-Aligned Reasoning in Large Language Models
 
 [![Paper](https://img.shields.io/badge/📄_Paper-arXiv-b31b1b.svg)](https://www.arxiv.org/abs/2509.23441)
