@@ -1,7 +1,7 @@
 <div align="center">
 
 # Cognition-of-Thought (CooT)
-<img width="599" height="249" alt="image" src="https://github.com/user-attachments/assets/c03704b1-8c4c-47e5-a1c1-86df8fa0ef6a" />
+<img width="509" height="209" alt="image" src="https://github.com/user-attachments/assets/c03704b1-8c4c-47e5-a1c1-86df8fa0ef6a" />
 
 ## Eliciting Social-Aligned Reasoning in Large Language Models
 
@@ -56,15 +56,15 @@ When violations are detected, CooT intervenes by:
 | Benchmark | Metric | Base Model | CooT | Improvement |
 |-----------|---------|------------|------|-------------|
 | **AIR-Bench 2024** | Compliance Rate | 0.67 | **0.80** | **+13%** |
-| **HarmBench** | Attack Success Rate | 29.34% | **18.45%** | **-10.89%** |
+| **HarmBench** | Attack Success Rate | 29.34% | **18.45%** | **+10.89%** |
 
 ### 🤝 Social Intelligence Enhancement
 
 | Task Category | Base Model | CoT | CooT | Improvement |
 |---------------|------------|-----|------|-------------|
 | **Prosocial** | 41.24% | 45.52% | **50.26%** | **+9.02%** |
-| **Proself** ↓ | 21.12% | 21.84% | **16.27%** | **-4.85%** |
-| **Antisocial** ↓ | 15.05% | 15.24% | **12.19%** | **-2.86%** |
+| **Proself** ↓ | 21.12% | 21.84% | **16.27%** | **+4.85%** |
+| **Antisocial** ↓ | 15.05% | 15.24% | **12.19%** | **+2.86%** |
 
 ### 🏆 Breakthrough Achievement
 
