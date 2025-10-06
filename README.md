@@ -205,6 +205,4 @@ If you find CooT useful in your research, please cite our paper:
 
 **Transform your LLM's alignment from implicit to explicit with CooT!**
 
-[⬆️ Back to Top](#cognition-of-thought-coot)
-
 </div>
