@@ -214,7 +214,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Lead Author**: Xuanming Zhang (xzhang2846@wisc.edu)
 - **Project Issues**: [GitHub Issues](https://github.com/XMZhangAI/Cognition-of-Thought/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/XMZhangAI/Cognition-of-Thought/discussions)
 - **Paper**: [arXiv:2509.23441](https://arxiv.org/abs/2509.23441)
 
 ---
