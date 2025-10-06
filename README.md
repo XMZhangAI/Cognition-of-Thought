@@ -195,21 +195,6 @@ If you find CooT useful in your research, please cite our paper:
 
 ---
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- Built upon excellent work in LLM alignment and social intelligence research
-- Inspired by Asimov's Three Laws of Robotics and the BESSI psychological framework  
-- Special thanks to the open-source community for foundational tools
-- Evaluation conducted on AIR-Bench, HarmBench, and SocialEval benchmarks
-
----
-
 ## 📞 Contact & Support
 
 - **Lead Author**: Xuanming Zhang (xzhang2846@wisc.edu)
