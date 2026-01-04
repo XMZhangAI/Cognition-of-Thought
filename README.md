@@ -5,8 +5,6 @@
 
 ## Eliciting Social-Aligned Reasoning in Large Language Models
 
-[![Paper](https://img.shields.io/badge/📄_Paper-arXiv-b31b1b.svg)](https://www.arxiv.org/abs/2509.23441)
-[![Code](https://img.shields.io/badge/💻_Code-GitHub-green.svg)](https://github.com/XMZhangAI/Cognition-of-Thought)
 [![License](https://img.shields.io/badge/📜_License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/🐍_Python-3.8+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/🔥_PyTorch-2.0+-orange.svg)](https://pytorch.org/)
@@ -14,7 +12,6 @@
 *A novel decoding-time framework that transforms alignment from a static property into an explicit, dynamic, and auditable process*
 
 [**Getting Started**](#-quick-start) •
-[**Paper**](https://www.arxiv.org/abs/2509.23441) •
 [**Documentation**](docs/) •
 [**Examples**](examples/) •
 [**Citation**](#-citation)
@@ -177,29 +174,6 @@ for trace in traces['intervention_traces']:
 | Llama-4-Maverick-17B | 0.74 | **0.83** | +9.0% |
 | Gemma3-12B | 0.68 | **0.79** | +11.0% |
 | GPT-OSS-20B | 0.80 | **0.90** | +10.0% |
-
----
-
-## 📚 Citation
-
-If you find CooT useful in your research, please cite our paper:
-
-```bibtex
-@article{zhang2025coot,
-  title={Cognition-of-Thought Elicits Social-Aligned Reasoning in Large Language Models},
-  author={Zhang, Xuanming and Chen, Yuxuan and Yeh, Min-Hsuan and Li, Yixuan},
-  journal={arXiv preprint arXiv:2509.23441},
-  year={2025}
-}
-```
-
----
-
-## 📞 Contact & Support
-
-- **Lead Author**: Xuanming Zhang (xzhang2846@wisc.edu)
-- **Project Issues**: [GitHub Issues](https://github.com/XMZhangAI/Cognition-of-Thought/issues)
-- **Paper**: [arXiv:2509.23441](https://arxiv.org/abs/2509.23441)
 
 ---
 
