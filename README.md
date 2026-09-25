@@ -197,7 +197,7 @@ If you find CooT useful in your research, please cite our paper:
 
 ## 📞 Contact & Support
 
-- **Lead Author**: Xuanming Zhang (xzhang2846@wisc.edu)
+- **Lead Author**: Xuanming Zhang (zhangxm@worldeology.com)
 - **Project Issues**: [GitHub Issues](https://github.com/XMZhangAI/Cognition-of-Thought/issues)
 - **Paper**: [arXiv:2509.23441](https://arxiv.org/abs/2509.23441)
 
